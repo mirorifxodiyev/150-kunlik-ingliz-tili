@@ -1,5 +1,6 @@
 import { Lesson } from "../types";
 import { create5HourlyTasks } from "./month1";
+import { REALISTIC_SCENARIOS } from "./realisticDialogues";
 
 const M2_TOPICS = [
   { day: 31, title: "31-kun: Supermarketda xarid qilish va oziq-ovqatlar (Grocery Shopping)", theme: "Produce, bakery, dairy, aisle, checkout va narx so'rash" },
@@ -51,6 +52,22 @@ export const MONTH_2_LESSONS: Lesson[] = M2_TOPICS.map((topic, i) => {
     { en: "prescription", uz: "shifokor retsepti", example: "You need a doctor's prescription for this medicine.", exampleUz: "Bu dori uchun shifokor retsepti kerak bo'ladi.", ipaOrRespelling: "pri-SKRIP-shun" }
   ];
 
+  const custom = REALISTIC_SCENARIOS[day];
+  const finalDialogue = custom?.dialogue || {
+    title: `${topic.title} doirasida amaliy dialog`,
+    lines: [
+      { speaker: "Cashier", en: "Hi! Did you find everything okay today?", uz: "Salom! Bugun hamma kerakli narsani topa oldingizmi?" },
+      { speaker: "Bobur", en: "Yes, thank you! Everything was fresh and easy to find.", uz: "Ha, rahmat! Hamma narsa yangi va topish oson bo'ldi." },
+      { speaker: "Cashier", en: "Great! Your total is $42.50. How will you be paying?", uz: "Ajoyib! Jami $42.50 bo'ldi. Qanday to'lov qilasiz?" },
+      { speaker: "Bobur", en: "I will pay with my debit card, please.", uz: "Debet kartam bilan to'layman, iltimos." },
+      { speaker: "Cashier", en: "Please insert or tap your card on the terminal... Perfect. Here is your receipt.", uz: "Iltimos, kartangizni terminalga tiqing yoki tekkizing... Ajoyib. Mana sizning chekingiz." },
+      { speaker: "Bobur", en: "Thank you so much! Have a great afternoon.", uz: "Katta rahmat! Kunning ikkinchi yarmi yaxshi o'tsin." },
+      { speaker: "Cashier", en: "You too! See you next time.", uz: "Sizga ham! Keyingi safar ko'rishguncha." }
+    ]
+  };
+  const finalVocab = custom?.vocabulary || vocabItems;
+  const finalSpeakingPrompt = custom?.speakingPrompt || `Do'konda xarid qilish, narx so'rash va to'lov usulini tanlash bo'yicha sotuvchi bilan o'zingiz o'rtangizdagi 2 daqiqalik dialogingizni ovoz chiqarib ijro eting.`;
+
   return {
     id: `m2_d${day}`,
     month: 2,
@@ -64,7 +81,7 @@ export const MONTH_2_LESSONS: Lesson[] = M2_TOPICS.map((topic, i) => {
       "Do'kon, transport va shifoxonada mustaqil muloqot qila olish",
       "Kunlik 5 soatlik amaliy rejani to'liq yakunlab, testdan kamida 70% to'plash"
     ],
-    vocabulary: vocabItems,
+    vocabulary: finalVocab,
     grammar: {
       title: `${topic.title}: Grammatik qoidalar`,
       explanationUz: `Ushbu darsda siz A2 darajasidagi ${topic.theme} mavzusini mustahkamlaysiz. Amerika hayotida kundalik xaridlar, xizmat ko'rsatish joylari va o'tgan zamondagi voqealarni bayon qilishda ushbu qoidalar poydevor hisoblanadi.`,
@@ -83,18 +100,7 @@ export const MONTH_2_LESSONS: Lesson[] = M2_TOPICS.map((topic, i) => {
       { en: "Take this medicine twice a day after meals.", uz: "Bu dorini kuniga ikki marta ovqatdan keyin iching." },
       { en: "The grocery store is located two blocks away.", uz: "Oziq-ovqat do'koni ikki kvartal narida joylashgan." }
     ],
-    dialogue: {
-      title: `${topic.title} doirasida amaliy dialog`,
-      lines: [
-        { speaker: "Cashier", en: "Hi! Did you find everything okay today?", uz: "Salom! Bugun hamma kerakli narsani topa oldingizmi?" },
-        { speaker: "Bobur", en: "Yes, thank you! Everything was fresh and easy to find.", uz: "Ha, rahmat! Hamma narsa yangi va topish oson bo'ldi." },
-        { speaker: "Cashier", en: "Great! Your total is $42.50. How will you be paying?", uz: "Ajoyib! Jami $42.50 bo'ldi. Qanday to'lov qilasiz?" },
-        { speaker: "Bobur", en: "I will pay with my debit card, please.", uz: "Debet kartam bilan to'layman, iltimos." },
-        { speaker: "Cashier", en: "Please insert or tap your card on the terminal... Perfect. Here is your receipt.", uz: "Iltimos, kartangizni terminalga tiqing yoki tekkizing... Ajoyib. Mana sizning chekingiz." },
-        { speaker: "Bobur", en: "Thank you so much! Have a great afternoon.", uz: "Katta rahmat! Kunning ikkinchi yarmi yaxshi o'tsin." },
-        { speaker: "Cashier", en: "You too! See you next time.", uz: "Sizga ham! Keyingi safar ko'rishguncha." }
-      ]
-    },
+    dialogue: finalDialogue,
     tasks: create5HourlyTasks(
       topic.title,
       topic.theme,
@@ -182,7 +188,7 @@ export const MONTH_2_LESSONS: Lesson[] = M2_TOPICS.map((topic, i) => {
       { title: "EnglishClass101 — Everyday American Conversations (A2)", url: "https://www.youtube.com", type: "Video Guide" },
       { title: "USAHello — Shopping & Transportation in the US", url: "https://usahello.org", type: "Immigrant Guide" }
     ],
-    speakingPrompt: `Do'konda xarid qilish, narx so'rash va to'lov usulini tanlash bo'yicha sotuvchi bilan o'zingiz o'rtangizdagi 2 daqiqalik dialogingizni ovoz chiqarib ijro eting.`,
+    speakingPrompt: finalSpeakingPrompt,
     writingPrompt: `Shaharda qanday transportdan foydalanishingiz, oziq-ovqatlarni qayerdan xarid qilishingiz haqida 90-130 so'zli hikoya yozing.`,
     reviewItems: [`m2_d${Math.max(31, day - 1)}`, `m1_d${Math.max(1, day - 30)}`],
     summaryChecklist: [

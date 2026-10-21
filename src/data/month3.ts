@@ -1,5 +1,6 @@
 import { Lesson } from "../types";
 import { create5HourlyTasks } from "./month1";
+import { REALISTIC_SCENARIOS } from "./realisticDialogues";
 
 const M3_TOPICS = [
   { day: 61, title: "61-kun: AQSHda ish qidirish va rezyume asoslari (Job Search & Resume Basics)", theme: "Work experience, skills, references, application form, full-time vs part-time" },
@@ -51,6 +52,22 @@ export const MONTH_3_LESSONS: Lesson[] = M3_TOPICS.map((topic, i) => {
     { en: "clarify", uz: "aniqlashtirmoq / tushuntirib bermoq", example: "Could you please clarify what time my shift begins?", exampleUz: "Mening smenam soat nechada boshlanishini aniqlashtirib bera olasizmi?", ipaOrRespelling: "KLAIR-uh-fy" }
   ];
 
+  const custom = REALISTIC_SCENARIOS[day];
+  const finalDialogue = custom?.dialogue || {
+    title: `${topic.title} mavzusida amaliy suhbat`,
+    lines: [
+      { speaker: "Leasing Agent", en: "Good morning! Are you here to look at the two-bedroom apartment?", uz: "Xayrli tong! Ikki xonali kvartirani ko'rishga keldingizmi?" },
+      { speaker: "Farrux", en: "Yes, exactly. Could you tell me what the monthly rent includes?", uz: "Ha, aynan shunday. Oylik ijara puli o'z ichiga nimalarni olishini ayta olasizmi?" },
+      { speaker: "Leasing Agent", en: "Water and trash are included. Electricity and Wi-Fi are the tenant's responsibility.", uz: "Suv va chiqindi ichiga kiradi. Elektr va Wi-Fi ijarachining mas'uliyati." },
+      { speaker: "Farrux", en: "That sounds fair. What is the security deposit amount?", uz: "Bu maqbul. Garov puli (security deposit) miqdori qancha?" },
+      { speaker: "Leasing Agent", en: "It is one month's rent, fully refundable if the apartment is kept in good condition.", uz: "Bir oylik ijara miqdorida, agar kvartira yaxshi holatda saqlansa to'liq qaytariladi." },
+      { speaker: "Farrux", en: "Understood. How long does the background check usually take?", uz: "Tushunarli. Ma'lumotlarni tekshirish (background check) odatda qancha vaqt oladi?" },
+      { speaker: "Leasing Agent", en: "Typically two to three business days once you submit the application.", uz: "Arizani topshirishingiz bilan odatda ikki-uch ish kuni davom etadi." }
+    ]
+  };
+  const finalVocab = custom?.vocabulary || vocabItems;
+  const finalSpeakingPrompt = custom?.speakingPrompt || `Bank xodimi yoki kvartira ijarasi bo'limi agenti bilan 2-3 daqiqa davomida savol-javob qilayotganingizni tasavvur qilib, ovoz chiqarib gapiring.`;
+
   return {
     id: `m3_d${day}`,
     month: 3,
@@ -64,7 +81,7 @@ export const MONTH_3_LESSONS: Lesson[] = M3_TOPICS.map((topic, i) => {
       "Kvartira ijarasi, bank xizmatlari va shifoxonada mustaqil ish ko'ra olish",
       "Kunlik 5 soatlik vazifalarni to'liq yakunlab, testdan kamida 70% olish"
     ],
-    vocabulary: vocabItems,
+    vocabulary: finalVocab,
     grammar: {
       title: `${topic.title}: Rasmiy va amaliy grammatika qoidasi`,
       explanationUz: `Ushbu darsda siz ${topic.theme} mavzusini professional darajada o'rganasiz. AQSHda rasmiy anketalar to'ldirish, ish beruvchiga o'z tajribangizni bildirish (Present Perfect) va shartli takliflar bildirish (First Conditional) amaliy mustaqillik garovidir.`,
@@ -83,18 +100,7 @@ export const MONTH_3_LESSONS: Lesson[] = M3_TOPICS.map((topic, i) => {
       { en: "If you hear sirens, pull your car over to the right and stop.", uz: "Agar sirena ovozini eshitsangiz, mashinangizni o'ngga olib to'xtang." },
       { en: "I submitted a maintenance request for the kitchen faucet yesterday.", uz: "Kecha oshxona jo'mragi uchun ta'mirlash arizasini topshirdim." }
     ],
-    dialogue: {
-      title: `${topic.title} mavzusida amaliy suhbat`,
-      lines: [
-        { speaker: "Leasing Agent", en: "Good morning! Are you here to look at the two-bedroom apartment?", uz: "Xayrli tong! Ikki xonali kvartirani ko'rishga keldingizmi?" },
-        { speaker: "Farrux", en: "Yes, exactly. Could you tell me what the monthly rent includes?", uz: "Ha, aynan shunday. Oylik ijara puli o'z ichiga nimalarni olishini ayta olasizmi?" },
-        { speaker: "Leasing Agent", en: "Water and trash are included. Electricity and Wi-Fi are the tenant's responsibility.", uz: "Suv va chiqindi ichiga kiradi. Elektr va Wi-Fi ijarachining mas'uliyati." },
-        { speaker: "Farrux", en: "That sounds fair. What is the security deposit amount?", uz: "Bu maqbul. Garov puli (security deposit) miqdori qancha?" },
-        { speaker: "Leasing Agent", en: "It is one month's rent, fully refundable if the apartment is kept in good condition.", uz: "Bir oylik ijara miqdorida, agar kvartira yaxshi holatda saqlansa to'liq qaytariladi." },
-        { speaker: "Farrux", en: "Understood. How long does the background check usually take?", uz: "Tushunarli. Ma'lumotlarni tekshirish (background check) odatda qancha vaqt oladi?" },
-        { speaker: "Leasing Agent", en: "Typically two to three business days once you submit the application.", uz: "Arizani topshirishingiz bilan odatda ikki-uch ish kuni davom etadi." }
-      ]
-    },
+    dialogue: finalDialogue,
     tasks: create5HourlyTasks(
       topic.title,
       topic.theme,
@@ -187,7 +193,7 @@ export const MONTH_3_LESSONS: Lesson[] = M3_TOPICS.map((topic, i) => {
       { title: "Consumer Financial Protection Bureau (CFPB) — Banking Basics", url: "https://www.consumerfinance.gov", type: "US Gov Portal" },
       { title: "USA.gov — Housing & Tenant Rights Guide", url: "https://www.usa.gov", type: "Official US Guide" }
     ],
-    speakingPrompt: `Bank xodimi yoki kvartira ijarasi bo'limi agenti bilan 2-3 daqiqa davomida savol-javob qilayotganingizni tasavvur qilib, ovoz chiqarib gapiring.`,
+    speakingPrompt: finalSpeakingPrompt,
     writingPrompt: `Ijara beruvchi kompaniyaga kvartirangizdagi muammo (masalan, issiq suv yoki isitkich) yuzasidan 100-140 so'zli rasmiy xat (maintenance request) yozing.`,
     reviewItems: [`m3_d${Math.max(61, day - 1)}`, `m2_d${Math.max(31, day - 30)}`],
     summaryChecklist: [

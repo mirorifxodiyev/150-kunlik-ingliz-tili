@@ -9,8 +9,9 @@ import {
   RotateCcw,
   Settings,
   Sparkles,
-  BarChart3,
-  BookmarkCheck
+  Trophy,
+  Smartphone,
+  BarChart3
 } from "lucide-react";
 
 export type ViewType =
@@ -30,6 +31,10 @@ interface NavigationProps {
   dueSrsCount: number;
   activeMistakesCount: number;
   ownerUnlockMode: boolean;
+  onOpenBadges?: () => void;
+  unlockedBadgesCount?: number;
+  onInstallPwa?: () => void;
+  canInstallPwa?: boolean;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({
@@ -39,6 +44,10 @@ export const Navigation: React.FC<NavigationProps> = ({
   dueSrsCount,
   activeMistakesCount,
   ownerUnlockMode,
+  onOpenBadges,
+  unlockedBadgesCount = 0,
+  onInstallPwa,
+  canInstallPwa = false,
 }) => {
   const navItems = [
     { id: "dashboard" as ViewType, label: "Bosh sahifa", icon: Calendar },
@@ -130,6 +139,34 @@ export const Navigation: React.FC<NavigationProps> = ({
             );
           })}
         </nav>
+
+        {/* Badges & PWA Quick Action */}
+        <div className="p-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+          {onOpenBadges && (
+            <button
+              onClick={onOpenBadges}
+              className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-semibold bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <span>Yutuqlar</span>
+              </div>
+              <span className="text-[11px] font-bold px-1.5 py-0.5 rounded bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100">
+                {unlockedBadgesCount}/10
+              </span>
+            </button>
+          )}
+
+          {canInstallPwa && onInstallPwa && (
+            <button
+              onClick={onInstallPwa}
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold bg-sky-600 hover:bg-sky-700 text-white shadow-xs transition-colors"
+            >
+              <Smartphone className="w-4 h-4 shrink-0" />
+              <span>Telefonga o'rnatish</span>
+            </button>
+          )}
+        </div>
 
         {/* Footer info */}
         <div className="p-4 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-400 leading-relaxed">

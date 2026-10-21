@@ -148,6 +148,16 @@ export interface SrsStats {
   totalReviewsCount: number;
 }
 
+export interface Badge {
+  id: string;
+  title: string;
+  descriptionUz: string;
+  iconName: string;
+  category: "streak" | "curriculum" | "speech" | "mastery";
+  unlocked: boolean;
+  unlockedDate?: string;
+}
+
 export interface AppSettings {
   theme: "light" | "dark" | "system";
   voiceURI: string;
@@ -164,5 +174,7 @@ export interface AppState {
   srsStats: SrsStats;
   mistakes: MistakeEntry[];
   streak: StreakState;
+  badges: Badge[];
+  pronunciationChecksCount: number;
   settings: AppSettings;
 }

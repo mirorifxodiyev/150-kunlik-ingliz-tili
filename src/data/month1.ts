@@ -1,4 +1,5 @@
 import { Lesson } from "../types";
+import { REALISTIC_SCENARIOS } from "./realisticDialogues";
 
 // Helper to generate full structured daily hourly tasks (5 hours = 300 minutes)
 export function create5HourlyTasks(
@@ -114,6 +115,22 @@ export const MONTH_1_LESSONS: Lesson[] = M1_TOPICS.map((topic, i) => {
     { en: "slowly", uz: "sekin / ohista", example: "Please speak more slowly.", exampleUz: "Iltimos, sekinroq gapiring.", ipaOrRespelling: "SLOH-lee" }
   ];
 
+  const custom = REALISTIC_SCENARIOS[day];
+  const finalDialogue = custom?.dialogue || {
+    title: `${topic.title} bo'yicha amaliy suhbat`,
+    lines: [
+      { speaker: "John", en: "Hello! Welcome to our language orientation center.", uz: "Salom! Til o'rganish markazimizga xush kelibsiz." },
+      { speaker: "Anvar", en: "Good morning, John! My name is Anvar.", uz: "Xayrli tong, Jon! Mening ismim Anvar." },
+      { speaker: "John", en: "Nice to meet you, Anvar. Where are you from?", uz: "Tanishganimdan xursandman, Anvar. Siz qayerdansiz?" },
+      { speaker: "Anvar", en: "I am from Uzbekistan. I arrived in the USA two weeks ago.", uz: "Men O'zbekistondanman. AQSHga ikki hafta oldin keldim." },
+      { speaker: "John", en: "That is wonderful! How is your English study going?", uz: "Bu ajoyib! Ingliz tilini o'rganishingiz qanday ketyapti?" },
+      { speaker: "Anvar", en: "I study five hours every single day, so I am making steady progress.", uz: "Men har kuni besh soatdan dars qilyapman, shuning uchun muntazam rivojlanyapman." },
+      { speaker: "John", en: "Keep it up! Consistency is the most important factor.", uz: "Shunday davom eting! Muntazamlik — eng muhim omildir." }
+    ]
+  };
+  const finalVocab = custom?.vocabulary || vocabItems;
+  const finalSpeakingPrompt = custom?.speakingPrompt || `${topic.title} mavzusi bo'yicha o'zingizni tanishtirib, bugungi o'rgangan yangi so'zlaringizdan foydalangan holda 2-3 daqiqa ovoz chiqarib gapiring.`;
+
   return {
     id: `m1_d${day}`,
     month: 1,
@@ -127,7 +144,7 @@ export const MONTH_1_LESSONS: Lesson[] = M1_TOPICS.map((topic, i) => {
       "Kundalik vaziyatda savol berish va javob qaytarish ko'nikmasini shakllantirish",
       "Kunlik 5 soatlik amaliy mashqlarni bajarib, testdan kamida 70% olish"
     ],
-    vocabulary: vocabItems,
+    vocabulary: finalVocab,
     grammar: {
       title: `${topic.title}: Asosiy grammatik qoida`,
       explanationUz: `Ushbu darsda siz ${topic.theme} mavzusini batafsil o'rganasiz. Amerika ingliz tilida aniq va sodda gap tuzish uchun so'z tartibi (Ega + Kesim + Ikkinchi darajali bo'laklar) muhim ahamiyatga ega. Formulalarni yod oling va namunaviy gaplarni ovoz chiqarib takrorlang.`,
@@ -146,18 +163,7 @@ export const MONTH_1_LESSONS: Lesson[] = M1_TOPICS.map((topic, i) => {
       { en: "We always practice speaking and listening together.", uz: "Biz doimo birga gapirish va tinglashni mashq qilamiz." },
       { en: "Take your time and do not worry about making mistakes.", uz: "Shoshilmang va xato qilishdan qo'rqmang." }
     ],
-    dialogue: {
-      title: `${topic.title} bo'yicha amaliy suhbat`,
-      lines: [
-        { speaker: "John", en: "Hello! Welcome to our language orientation center.", uz: "Salom! Til o'rganish markazimizga xush kelibsiz." },
-        { speaker: "Anvar", en: "Good morning, John! My name is Anvar.", uz: "Xayrli tong, Jon! Mening ismim Anvar." },
-        { speaker: "John", en: "Nice to meet you, Anvar. Where are you from?", uz: "Tanishganimdan xursandman, Anvar. Siz qayerdansiz?" },
-        { speaker: "Anvar", en: "I am from Uzbekistan. I arrived in the USA two weeks ago.", uz: "Men O'zbekistondanman. AQSHga ikki hafta oldin keldim." },
-        { speaker: "John", en: "That is wonderful! How is your English study going?", uz: "Bu ajoyib! Ingliz tilini o'rganishingiz qanday ketyapti?" },
-        { speaker: "Anvar", en: "I study five hours every single day, so I am making steady progress.", uz: "Men har kuni besh soatdan dars qilyapman, shuning uchun muntazam rivojlanyapman." },
-        { speaker: "John", en: "Keep it up! Consistency is the most important factor.", uz: "Shunday davom eting! Muntazamlik — eng muhim omildir." }
-      ]
-    },
+    dialogue: finalDialogue,
     tasks: create5HourlyTasks(
       topic.title,
       topic.theme,
@@ -240,7 +246,7 @@ export const MONTH_1_LESSONS: Lesson[] = M1_TOPICS.map((topic, i) => {
       { title: "VOA Learning English — Let's Learn English (Level 1)", url: "https://learningenglish.voanews.com", type: "Official ESL Portal" },
       { title: "Rachel's English — American English Sounds & Basics", url: "https://www.youtube.com/@rachelsenglish", type: "YouTube Video" }
     ],
-    speakingPrompt: `${topic.title} mavzusi bo'yicha o'zingizni tanishtirib, bugungi o'rgangan yangi so'zlaringizdan foydalangan holda 2-3 daqiqa ovoz chiqarib gapiring.`,
+    speakingPrompt: finalSpeakingPrompt,
     writingPrompt: `Bugungi dars mavzusi yuzasidan daftaringizga 80-120 so'zdan iborat matn yozing va bugungi lug'atdan kamida 6 ta so'zni qatnashtiring.`,
     reviewItems: day > 1 ? [`m1_d${day - 1}`] : [],
     summaryChecklist: [

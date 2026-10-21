@@ -12,7 +12,9 @@ import {
   Play,
   RotateCcw,
   Sparkles,
-  Trophy
+  Trophy,
+  Smartphone,
+  Award
 } from "lucide-react";
 
 interface DashboardViewProps {
@@ -22,6 +24,9 @@ interface DashboardViewProps {
   onOpenTest: (testId: string) => void;
   onNavigate: (view: any) => void;
   onToggleTask: (lessonId: string, taskIndex: number, completed: boolean) => void;
+  onOpenBadges?: () => void;
+  onInstallPwa?: () => void;
+  canInstallPwa?: boolean;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -31,6 +36,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenTest,
   onNavigate,
   onToggleTask,
+  onOpenBadges,
+  onInstallPwa,
+  canInstallPwa,
 }) => {
   // Find current active or first incomplete lesson
   const completedCount = allLessons.filter((l) =>
@@ -82,8 +90,33 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   const monthExamId = `exam_m${currentMonth}`;
   const monthExamProg = state.testProgress[monthExamId];
 
+  const unlockedBadgesCount = (state.badges || []).filter((b) => b.unlocked).length;
+
   return (
     <div className="space-y-6">
+      {/* PWA Install Banner if installable */}
+      {canInstallPwa && (
+        <div className="bg-gradient-to-r from-sky-600 to-indigo-600 rounded-xl p-4 text-white shadow-md flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 bg-white/20 rounded-lg shrink-0">
+              <Smartphone className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <div className="font-bold text-sm">Ilovani smartfonga o'rnating (PWA)</div>
+              <div className="text-xs text-sky-100">
+                Play Market kabi telefoningiz asosiy ekraniga chiqarib oling va oflayn rejimda ham o'rganing!
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onInstallPwa}
+            className="px-4 py-2 bg-white text-sky-700 hover:bg-sky-50 font-bold rounded-lg text-xs whitespace-nowrap shadow-sm transition-colors self-start sm:self-auto"
+          >
+            Ilovani o'rnatish
+          </button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-6">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -99,17 +132,26 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               haqiqiy natija har kungi 5 soatlik intizom, faol nutq va imtihon ko'rsatkichlariga bog'liq.
             </p>
           </div>
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center flex-wrap gap-2.5 shrink-0">
+            {onOpenBadges && (
+              <button
+                onClick={onOpenBadges}
+                className="px-3.5 py-2 border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/40 text-amber-900 dark:text-amber-200 font-semibold rounded-lg text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+              >
+                <Trophy className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                <span>Yutuqlar ({unlockedBadgesCount}/10)</span>
+              </button>
+            )}
             <button
               onClick={() => onOpenLesson(todayLesson.id)}
-              className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-medium rounded-lg text-sm transition-colors flex items-center gap-2 shadow-sm"
+              className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white font-medium rounded-lg text-xs sm:text-sm transition-colors flex items-center gap-2 shadow-sm"
             >
               <Play className="w-4 h-4 fill-white" />
               Bugungi dars ({todayLesson.day}-kun)
             </button>
             <button
               onClick={() => onNavigate("curriculum")}
-              className="px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium rounded-lg text-sm transition-colors"
+              className="px-4 py-2 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-medium rounded-lg text-xs sm:text-sm transition-colors"
             >
               Dasturni ko'rish
             </button>

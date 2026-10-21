@@ -3,6 +3,7 @@ import { AppState, Lesson, QuizQuestion } from "./types";
 import { CURRICULUM, TESTS } from "./data";
 import {
   calculateStreak,
+  evaluateBadges,
   getDefaultState,
   getTodayString,
   isLocalStorageFailing,
@@ -21,14 +22,57 @@ import { SrsReviewView } from "./components/SrsReviewView";
 import { MistakesView } from "./components/MistakesView";
 import { StatsView } from "./components/StatsView";
 import { SettingsView } from "./components/SettingsView";
+import { BadgesModal } from "./components/BadgesModal";
 import { AlertCircle } from "lucide-react";
 
 export default function App() {
-  const [state, setState] = useState<AppState>(() => loadAppState().state);
+  const [state, setState] = useState<AppState>(() => {
+    const loaded = loadAppState().state;
+    return evaluateBadges(loaded);
+  });
   const [currentView, setCurrentView] = useState<ViewType>("dashboard");
   const [activeLessonId, setActiveLessonId] = useState<string>("m1_d1");
   const [activeTestId, setActiveTestId] = useState<string>("w_m1_1");
   const [storageWarning, setStorageWarning] = useState<boolean>(false);
+  const [showBadgesModal, setShowBadgesModal] = useState<boolean>(false);
+
+  // PWA install prompt state
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isPwaInstalled, setIsPwaInstalled] = useState<boolean>(false);
+
+  // Listen for PWA beforeinstallprompt event
+  useEffect(() => {
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    const installedHandler = () => {
+      setIsPwaInstalled(true);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", handler);
+    window.addEventListener("appinstalled", installedHandler);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handler);
+      window.removeEventListener("appinstalled", installedHandler);
+    };
+  }, []);
+
+  const handleInstallPwa = async () => {
+    if (!deferredPrompt) {
+      alert("Ilovani o'rnatish uchun brauzeringiz menyusidan (3 ta nuqta yoki 'Share') 'Add to Home Screen' (Ekraningizga qo'shish) tugmasini bosing.");
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === "accepted") {
+      setDeferredPrompt(null);
+      setIsPwaInstalled(true);
+    }
+  };
 
   // Apply theme class
   useEffect(() => {
@@ -50,10 +94,11 @@ export default function App() {
     }
   }, [state.settings.theme]);
 
-  // Persist state on change
+  // Persist state on change & evaluate badges automatically
   const updateAndSaveState = (updater: (prev: AppState) => AppState) => {
     setState((prev) => {
-      const next = updater(prev);
+      const intermediate = updater(prev);
+      const next = evaluateBadges(intermediate);
       const ok = saveAppState(next);
       if (!ok && isLocalStorageFailing()) {
         setStorageWarning(true);
@@ -62,6 +107,14 @@ export default function App() {
       }
       return next;
     });
+  };
+
+  // Called when user speaks and tests pronunciation with microphone successfully
+  const handlePronounceWordSuccess = () => {
+    updateAndSaveState((prev) => ({
+      ...prev,
+      pronunciationChecksCount: (prev.pronunciationChecksCount || 0) + 1,
+    }));
   };
 
   // Toggle hourly task completion (1 of the 5 tasks)
@@ -313,6 +366,9 @@ export default function App() {
   ).length;
   const activeMistakesCount = state.mistakes.filter((m) => !m.mastered).length;
 
+  const unlockedBadgesCount = (state.badges || []).filter((b) => b.unlocked).length;
+  const canInstallPwa = Boolean(deferredPrompt) || (!isPwaInstalled && typeof window !== "undefined");
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col lg:flex-row font-sans">
       {/* Navigation */}
@@ -326,6 +382,10 @@ export default function App() {
         dueSrsCount={dueSrsCount}
         activeMistakesCount={activeMistakesCount}
         ownerUnlockMode={state.settings.ownerUnlockMode}
+        onOpenBadges={() => setShowBadgesModal(true)}
+        unlockedBadgesCount={unlockedBadgesCount}
+        onInstallPwa={handleInstallPwa}
+        canInstallPwa={canInstallPwa}
       />
 
       {/* Main Content Area */}
@@ -352,6 +412,9 @@ export default function App() {
                 window.scrollTo({ top: 0, behavior: "smooth" });
               }}
               onToggleTask={handleToggleTask}
+              onOpenBadges={() => setShowBadgesModal(true)}
+              onInstallPwa={handleInstallPwa}
+              canInstallPwa={canInstallPwa}
             />
           )}
 
@@ -373,6 +436,7 @@ export default function App() {
               onSaveQuizResult={handleSaveQuizResult}
               onSaveNote={handleSaveNote}
               onAddVocabularyToSrs={handleAddVocabularyToSrs}
+              onPronounceWordSuccess={handlePronounceWordSuccess}
             />
           )}
 
@@ -426,6 +490,14 @@ export default function App() {
           )}
         </main>
       </div>
+
+      {/* Badges Modal */}
+      {showBadgesModal && (
+        <BadgesModal
+          badges={state.badges || []}
+          onClose={() => setShowBadgesModal(false)}
+        />
+      )}
     </div>
   );
 }

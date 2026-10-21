@@ -1,4 +1,4 @@
-import { AppState, Lesson, MistakeEntry, SrsCard } from "../types";
+import { AppState, Badge, Lesson, MistakeEntry, SrsCard } from "../types";
 
 export const STORAGE_KEY = "eng150_v1";
 export const SCHEMA_VERSION = 1;
@@ -12,6 +12,91 @@ export function getTodayString(): string {
   const month = String(now.getMonth() + 1).padStart(2, "0");
   const day = String(now.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
+}
+
+export function getDefaultBadges(): Badge[] {
+  return [
+    {
+      id: "first_step",
+      title: "Birinchi qadam",
+      descriptionUz: "1-kunlik darsni to'liq 5 soatini yakunladingiz!",
+      iconName: "Footprints",
+      category: "curriculum",
+      unlocked: false,
+    },
+    {
+      id: "week_1",
+      title: "1-hafta poydevori",
+      descriptionUz: "Dastlabki 7 kunlik amaliyot muvaffaqiyatli yakunlandi.",
+      iconName: "Calendar",
+      category: "curriculum",
+      unlocked: false,
+    },
+    {
+      id: "streak_7",
+      title: "Olovli intizom",
+      descriptionUz: "Ketma-ket 7 kun uzluksiz o'qish (Streak).",
+      iconName: "Flame",
+      category: "streak",
+      unlocked: false,
+    },
+    {
+      id: "speech_5",
+      title: "Jonli talaffuz ustasi",
+      descriptionUz: "Mikrofon orqali kamida 5 ta so'z/iborani 85%+ aniqlikda talaffuz qildingiz.",
+      iconName: "Mic",
+      category: "speech",
+      unlocked: false,
+    },
+    {
+      id: "a1_grad",
+      title: "A1 Poydevor egasi",
+      descriptionUz: "1-oy yakuniy imtihonidan kamida 70% to'plab o'tdingiz.",
+      iconName: "Trophy",
+      category: "mastery",
+      unlocked: false,
+    },
+    {
+      id: "banking_expert",
+      title: "Bank va Moliya ustasi",
+      descriptionUz: "AQSHda Checking hisob va to'lovlar mavzusini o'zlashtirdingiz.",
+      iconName: "CreditCard",
+      category: "curriculum",
+      unlocked: false,
+    },
+    {
+      id: "us_ready",
+      title: "AQSH Hayotiga Tayyor",
+      descriptionUz: "Kvartira ijarasi, ish qidirish va 911 mavzularini tugatdingiz.",
+      iconName: "Building",
+      category: "curriculum",
+      unlocked: false,
+    },
+    {
+      id: "srs_champ",
+      title: "Super Xotira (SRS)",
+      descriptionUz: "SRS interval takrorlash tizimida 30 dan ortiq so'zni esladingiz.",
+      iconName: "RotateCcw",
+      category: "mastery",
+      unlocked: false,
+    },
+    {
+      id: "mistake_slayer",
+      title: "Xatolar qotili",
+      descriptionUz: "Xatolar daftaridagi kamida 3 ta savolni ketma-ket 3/3 to'g'ri qilib o'zlashtirdingiz.",
+      iconName: "CheckCircle2",
+      category: "mastery",
+      unlocked: false,
+    },
+    {
+      id: "b2_legend",
+      title: "B2 Amerika Chempioni",
+      descriptionUz: "150 kunlik butun dasturni to'liq tugatib, yakuniy imtihonni topshirdingiz!",
+      iconName: "Crown",
+      category: "mastery",
+      unlocked: false,
+    },
+  ];
 }
 
 export function getDefaultState(): AppState {
@@ -33,6 +118,8 @@ export function getDefaultState(): AppState {
       best: 0,
       lastCompletedDate: null,
     },
+    badges: getDefaultBadges(),
+    pronunciationChecksCount: 0,
     settings: {
       theme: "system",
       voiceURI: "",
@@ -45,6 +132,26 @@ export function getDefaultState(): AppState {
 export function migrateState(data: any): AppState {
   const fallback = getDefaultState();
   if (!data || typeof data !== "object") return fallback;
+
+  // Merge default badges with existing
+  const existingBadgesMap = new Map<string, any>();
+  if (Array.isArray(data.badges)) {
+    data.badges.forEach((b: any) => {
+      if (b && b.id) existingBadgesMap.set(b.id, b);
+    });
+  }
+
+  const mergedBadges = getDefaultBadges().map((db) => {
+    const found = existingBadgesMap.get(db.id);
+    if (found) {
+      return {
+        ...db,
+        unlocked: Boolean(found.unlocked),
+        unlockedDate: found.unlockedDate,
+      };
+    }
+    return db;
+  });
 
   return {
     schemaVersion: SCHEMA_VERSION,
@@ -64,6 +171,8 @@ export function migrateState(data: any): AppState {
       best: typeof data.streak.best === "number" ? data.streak.best : 0,
       lastCompletedDate: data.streak.lastCompletedDate || null,
     } : fallback.streak,
+    badges: mergedBadges,
+    pronunciationChecksCount: typeof data.pronunciationChecksCount === "number" ? data.pronunciationChecksCount : 0,
     settings: data.settings && typeof data.settings === "object" ? {
       theme: ["light", "dark", "system"].includes(data.settings.theme) ? data.settings.theme : "system",
       voiceURI: typeof data.settings.voiceURI === "string" ? data.settings.voiceURI : "",
@@ -383,3 +492,43 @@ export function recordMistakeRetryResult(
   list[idx] = item;
   return list;
 }
+
+export function evaluateBadges(state: AppState): AppState {
+  const today = getTodayString();
+  const badges = state.badges.map((b) => {
+    if (b.unlocked) return b;
+    let shouldUnlock = false;
+
+    if (b.id === "first_step") {
+      shouldUnlock = isLessonFullyCompleted("m1_d1", state);
+    } else if (b.id === "week_1") {
+      const days1to7 = [1, 2, 3, 4, 5, 6, 7];
+      shouldUnlock = days1to7.every((d) => isLessonFullyCompleted(`m1_d${d}`, state));
+    } else if (b.id === "streak_7") {
+      shouldUnlock = state.streak.current >= 7 || state.streak.best >= 7;
+    } else if (b.id === "speech_5") {
+      shouldUnlock = (state.pronunciationChecksCount || 0) >= 5;
+    } else if (b.id === "a1_grad") {
+      shouldUnlock = Boolean(state.testProgress["exam_m1"]?.passed);
+    } else if (b.id === "banking_expert") {
+      shouldUnlock = isLessonFullyCompleted("m3_d64", state);
+    } else if (b.id === "us_ready") {
+      shouldUnlock = isLessonFullyCompleted("m3_d67", state) && isLessonFullyCompleted("m3_d71", state);
+    } else if (b.id === "srs_champ") {
+      shouldUnlock = (state.srsStats?.correctAnswersTotal || 0) >= 30;
+    } else if (b.id === "mistake_slayer") {
+      const mastered = state.mistakes.filter((m) => m.mastered).length;
+      shouldUnlock = mastered >= 3;
+    } else if (b.id === "b2_legend") {
+      shouldUnlock = Boolean(state.testProgress["exam_m5"]?.passed);
+    }
+
+    if (shouldUnlock) {
+      return { ...b, unlocked: true, unlockedDate: today };
+    }
+    return b;
+  });
+
+  return { ...state, badges };
+}
+

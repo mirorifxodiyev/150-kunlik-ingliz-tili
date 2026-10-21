@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { AppState, Lesson, QuizQuestion } from "../types";
 import { SpeechController } from "../utils/speech";
+import { SpeechRecognitionService, SpeechRecognitionResult } from "../utils/speechRecognition";
 import {
   ArrowLeft,
   BookOpen,
@@ -8,9 +9,11 @@ import {
   Clock,
   Headphones,
   Mic,
+  MicOff,
   PenTool,
   Play,
   RotateCcw,
+  Sparkles,
   Square,
   Volume2,
   AlertCircle
@@ -24,6 +27,7 @@ interface LessonDetailViewProps {
   onSaveQuizResult: (lessonId: string, score: number, mistakes: QuizQuestion[], userAnswers: Record<string, string>) => void;
   onSaveNote: (lessonId: string, note: string) => void;
   onAddVocabularyToSrs: (lesson: Lesson) => void;
+  onPronounceWordSuccess?: () => void;
 }
 
 export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
@@ -34,9 +38,17 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
   onSaveQuizResult,
   onSaveNote,
   onAddVocabularyToSrs,
+  onPronounceWordSuccess,
 }) => {
   const [activeTab, setActiveTab] = useState<number>(0);
   const [writingNote, setWritingNote] = useState<string>("");
+
+  // Pronunciation checking states
+  const [activeMicIndex, setActiveMicIndex] = useState<number | null>(null);
+  const [isListeningPrompt, setIsListeningPrompt] = useState<boolean>(false);
+  const [spokenPromptText, setSpokenPromptText] = useState<string>("");
+  const [pronunciationMap, setPronunciationMap] = useState<Record<number, SpeechRecognitionResult>>({});
+  const [micErrorMessage, setMicErrorMessage] = useState<string | null>(null);
 
   // Quiz state
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
@@ -89,6 +101,54 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
       voiceURI: state.settings.voiceURI,
       rate: state.settings.speechRate,
     });
+  };
+
+  const handleCheckPronunciation = (index: number, targetWord: string) => {
+    setMicErrorMessage(null);
+    setActiveMicIndex(index);
+
+    SpeechRecognitionService.listenAndCheck(
+      targetWord,
+      (res) => {
+        setPronunciationMap((prev) => ({ ...prev, [index]: res }));
+        setActiveMicIndex(null);
+        if (res.accuracyPct >= 80 && onPronounceWordSuccess) {
+          onPronounceWordSuccess();
+        }
+      },
+      (err) => {
+        setMicErrorMessage(err);
+        setActiveMicIndex(null);
+      },
+      () => {},
+      () => {
+        setActiveMicIndex(null);
+      }
+    );
+  };
+
+  const handleListenSpeakingPrompt = () => {
+    setMicErrorMessage(null);
+    setIsListeningPrompt(true);
+
+    SpeechRecognitionService.listenAndCheck(
+      "",
+      (res) => {
+        setSpokenPromptText(res.transcript);
+        setIsListeningPrompt(false);
+        if (res.transcript && onPronounceWordSuccess) {
+          onPronounceWordSuccess();
+        }
+      },
+      (err) => {
+        setMicErrorMessage(err);
+        setIsListeningPrompt(false);
+      },
+      () => {},
+      () => {
+        setIsListeningPrompt(false);
+      }
+    );
   };
 
   const handleQuizOptionSelect = (qId: string, val: string) => {
@@ -270,46 +330,113 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {lesson.vocabulary.map((v, i) => (
-              <div
-                key={i}
-                className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between"
+          {micErrorMessage && (
+            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-3.5 rounded-xl flex items-start gap-3 text-xs text-rose-700 dark:text-rose-300">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <div className="flex-1">
+                <span className="font-bold">Mikrofon xatosi:</span> {micErrorMessage}
+              </div>
+              <button
+                onClick={() => setMicErrorMessage(null)}
+                className="text-xs font-semibold hover:underline"
               >
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <div className="flex items-center gap-2">
-                      <span className="text-base font-bold text-slate-900 dark:text-white">
-                        {v.en}
-                      </span>
-                      <span className="text-xs text-slate-400 font-mono">
-                        /{v.ipaOrRespelling}/
-                      </span>
-                    </div>
-                    <button
-                      onClick={() => handleSpeak(v.en)}
-                      className="p-1.5 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 text-sky-600 dark:text-sky-300 transition-colors"
-                      title="Talaffuzni tinglash"
-                    >
-                      <Volume2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                Yopish
+              </button>
+            </div>
+          )}
 
-                  <div className="text-xs font-semibold text-sky-600 dark:text-sky-400 mb-2">
-                    {v.uz}
-                  </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {lesson.vocabulary.map((v, i) => {
+              const res = pronunciationMap[i];
+              const isListening = activeMicIndex === i;
 
-                  <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-lg text-xs space-y-1">
-                    <div className="text-slate-800 dark:text-slate-200 font-medium">
-                      "{v.example}"
+              return (
+                <div
+                  key={i}
+                  className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 flex flex-col justify-between"
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-base font-bold text-slate-900 dark:text-white">
+                          {v.en}
+                        </span>
+                        <span className="text-xs text-slate-400 font-mono">
+                          /{v.ipaOrRespelling}/
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => handleSpeak(v.en)}
+                          className="p-1.5 rounded-lg bg-sky-50 dark:bg-sky-950/60 hover:bg-sky-100 dark:hover:bg-sky-900/60 text-sky-600 dark:text-sky-300 transition-colors"
+                          title="Talaffuzni tinglash"
+                        >
+                          <Volume2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleCheckPronunciation(i, v.en)}
+                          className={`p-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-semibold ${
+                            isListening
+                              ? "bg-rose-600 text-white animate-pulse shadow-md"
+                              : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
+                          }`}
+                          title="Mikrofonga aytib talaffuzingizni tekshiring"
+                        >
+                          <Mic className="w-4 h-4" />
+                          {isListening && <span className="text-[11px] pr-1">Eshitilmoqda...</span>}
+                        </button>
+                      </div>
                     </div>
-                    <div className="text-slate-500 dark:text-slate-400 italic">
-                      "{v.exampleUz}"
+
+                    <div className="text-xs font-semibold text-sky-600 dark:text-sky-400 mb-2">
+                      {v.uz}
                     </div>
+
+                    <div className="bg-slate-50 dark:bg-slate-800/50 p-2.5 rounded-lg text-xs space-y-1 mb-2">
+                      <div className="text-slate-800 dark:text-slate-200 font-medium">
+                        "{v.example}"
+                      </div>
+                      <div className="text-slate-500 dark:text-slate-400 italic">
+                        "{v.exampleUz}"
+                      </div>
+                    </div>
+
+                    {/* Pronunciation Feedback Result */}
+                    {res && (
+                      <div
+                        className={`p-2.5 rounded-lg text-xs border transition-all ${
+                          res.accuracyPct >= 80
+                            ? "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200"
+                            : res.accuracyPct >= 50
+                            ? "bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200"
+                            : "bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800 text-rose-900 dark:text-rose-200"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between font-bold mb-1">
+                          <span className="flex items-center gap-1">
+                            {res.accuracyPct >= 80 ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                            ) : (
+                              <Sparkles className="w-3.5 h-3.5 text-amber-600" />
+                            )}
+                            Aniqlik: {res.accuracyPct}%
+                          </span>
+                          <span className="text-[10px] font-normal opacity-75">
+                            {res.isMatch ? "To'g'ri qabul qilindi" : "Yaxshiroq aytish mumkin"}
+                          </span>
+                        </div>
+                        <div className="text-[11px] opacity-90 mb-0.5">
+                          <span className="font-semibold">Siz aytdingiz:</span> "{res.transcript || "aniqlanmadi"}"
+                        </div>
+                        <div className="text-[11px] font-medium mt-1">
+                          {res.messageUz}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
@@ -460,16 +587,57 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
       {activeTab === 4 && (
         <div className="space-y-6">
           {/* Speaking Prompt Card */}
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
-              <Mic className="w-4 h-4 text-sky-600" />
-              Og'zaki gapirish amaliyoti (Speaking Practice)
-            </h2>
-            <p className="text-xs text-slate-500 mb-3">
-              Telefoningizning diktofonini yoqing yoki o'zingizga ovoz chiqarib 2-3 daqiqa gapiring:
-            </p>
-            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-800 dark:text-slate-200 leading-relaxed">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-4">
+            <div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white mb-1 flex items-center gap-2">
+                <Mic className="w-4 h-4 text-sky-600" />
+                Og'zaki gapirish amaliyoti (Speaking Practice)
+              </h2>
+              <p className="text-xs text-slate-500">
+                Quyidagi mavzu bo'yicha ovoz chiqarib gapiring. Brauzer mikrofonini yoqib nutqingizni yozib olishingiz va tekshirishingiz mumkin:
+              </p>
+            </div>
+
+            <div className="p-3.5 bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 rounded-lg text-xs text-slate-800 dark:text-slate-200 leading-relaxed font-medium">
               {lesson.speakingPrompt}
+            </div>
+
+            {/* Interactive Recording Section */}
+            <div className="bg-sky-50/50 dark:bg-sky-950/20 border border-sky-100 dark:border-sky-900/50 rounded-xl p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <button
+                  onClick={handleListenSpeakingPrompt}
+                  className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
+                    isListeningPrompt
+                      ? "bg-rose-600 text-white animate-pulse shadow-lg"
+                      : "bg-sky-600 hover:bg-sky-700 text-white shadow-sm"
+                  }`}
+                >
+                  <Mic className="w-4 h-4" />
+                  {isListeningPrompt ? "Sizni eshitmoqda... Gapiring!" : "Mikrofonni yoqib gapirish"}
+                </button>
+
+                <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                  {isListeningPrompt
+                    ? "Gapirib bo'lgach 1-2 soniya kuting..."
+                    : "Mikrofon tugmasini bosing va inglizcha gapiring"}
+                </span>
+              </div>
+
+              {spokenPromptText && (
+                <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 text-xs space-y-1">
+                  <div className="flex items-center gap-1.5 font-bold text-emerald-700 dark:text-emerald-400">
+                    <CheckCircle2 className="w-4 h-4" />
+                    Nutq muvaffaqiyatli yozildi:
+                  </div>
+                  <div className="text-slate-800 dark:text-slate-200 italic pl-5">
+                    "{spokenPromptText}"
+                  </div>
+                  <div className="text-[11px] text-emerald-600 dark:text-emerald-400 pl-5 pt-1">
+                    Ajoyib! Ovoz chiqarib gapirish har kuni til to'sig'ini sindirishning eng tezkor yo'li.
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
