@@ -4,28 +4,28 @@ import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import {defineConfig} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
   return {
-    base: './',
+    base: command === 'serve' ? '/' : './',
     plugins: [
       react(),
       tailwindcss(),
       VitePWA({
         registerType: 'autoUpdate',
         devOptions: {
-          enabled: true,
+          enabled: false,
         },
         includeAssets: ['apple-touch-icon.png', 'icon.svg'],
         manifest: {
-          id: './',
+          id: '/',
           name: '150-Kunlik Amerika Ingliz Tili Platformasi',
           short_name: 'Ingliz150',
           description: "AQSHga ko'chib o'tayotganlar uchun 150 kunlik (kuniga 5 soat) oflayn Amerika ingliz tili platformasi",
           theme_color: '#0284c7',
           background_color: '#f8fafc',
           display: 'standalone',
-          start_url: './',
-          scope: './',
+          start_url: '/',
+          scope: '/',
           icons: [
             {
               src: 'pwa-192x192.png',

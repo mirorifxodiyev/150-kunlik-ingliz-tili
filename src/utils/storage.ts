@@ -494,8 +494,18 @@ export function recordMistakeRetryResult(
 }
 
 export function evaluateBadges(state: AppState): AppState {
+  if (!state || typeof state !== "object") {
+    return getDefaultState();
+  }
   const today = getTodayString();
-  const badges = state.badges.map((b) => {
+  const badgesList = Array.isArray(state.badges) ? state.badges : getDefaultBadges();
+  const streak = state.streak || { current: 0, best: 0, lastCompletedDate: null };
+  const mistakes = Array.isArray(state.mistakes) ? state.mistakes : [];
+  const testProgress = state.testProgress || {};
+  const srsStats = state.srsStats || { correctAnswersTotal: 0, reviewedTodayCount: 0, lastReviewDate: today, totalReviewsCount: 0 };
+  const pronunciationChecksCount = typeof state.pronunciationChecksCount === "number" ? state.pronunciationChecksCount : 0;
+
+  const badges = badgesList.map((b) => {
     if (b.unlocked) return b;
     let shouldUnlock = false;
 
@@ -505,22 +515,22 @@ export function evaluateBadges(state: AppState): AppState {
       const days1to7 = [1, 2, 3, 4, 5, 6, 7];
       shouldUnlock = days1to7.every((d) => isLessonFullyCompleted(`m1_d${d}`, state));
     } else if (b.id === "streak_7") {
-      shouldUnlock = state.streak.current >= 7 || state.streak.best >= 7;
+      shouldUnlock = (streak.current || 0) >= 7 || (streak.best || 0) >= 7;
     } else if (b.id === "speech_5") {
-      shouldUnlock = (state.pronunciationChecksCount || 0) >= 5;
+      shouldUnlock = pronunciationChecksCount >= 5;
     } else if (b.id === "a1_grad") {
-      shouldUnlock = Boolean(state.testProgress["exam_m1"]?.passed);
+      shouldUnlock = Boolean(testProgress["exam_m1"]?.passed);
     } else if (b.id === "banking_expert") {
       shouldUnlock = isLessonFullyCompleted("m3_d64", state);
     } else if (b.id === "us_ready") {
       shouldUnlock = isLessonFullyCompleted("m3_d67", state) && isLessonFullyCompleted("m3_d71", state);
     } else if (b.id === "srs_champ") {
-      shouldUnlock = (state.srsStats?.correctAnswersTotal || 0) >= 30;
+      shouldUnlock = (srsStats.correctAnswersTotal || 0) >= 30;
     } else if (b.id === "mistake_slayer") {
-      const mastered = state.mistakes.filter((m) => m.mastered).length;
+      const mastered = mistakes.filter((m) => m && m.mastered).length;
       shouldUnlock = mastered >= 3;
     } else if (b.id === "b2_legend") {
-      shouldUnlock = Boolean(state.testProgress["exam_m5"]?.passed);
+      shouldUnlock = Boolean(testProgress["exam_m5"]?.passed);
     }
 
     if (shouldUnlock) {
@@ -529,6 +539,16 @@ export function evaluateBadges(state: AppState): AppState {
     return b;
   });
 
-  return { ...state, badges };
+  return {
+    ...state,
+    badges,
+    streak,
+    mistakes,
+    testProgress,
+    srsStats,
+    srsCards: Array.isArray(state.srsCards) ? state.srsCards : [],
+    lessonProgress: state.lessonProgress || {},
+    settings: state.settings || { theme: "system", voiceURI: "", speechRate: 0.95, ownerUnlockMode: false },
+  };
 }
 

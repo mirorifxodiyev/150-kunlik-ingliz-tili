@@ -177,7 +177,12 @@ export class SpeechRecognitionService {
       name = "Firefox";
     }
 
-    const isIframe = window.self !== window.top;
+    let isIframe = false;
+    try {
+      isIframe = window.self !== window.top;
+    } catch {
+      isIframe = true;
+    }
     const hasSpeechRecognition = Boolean(
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
     );
