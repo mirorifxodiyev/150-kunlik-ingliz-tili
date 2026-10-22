@@ -1,6 +1,0 @@
-{
-  "name": "150-Kunlik Ingliz Tili Platformasi",
-  "description": "AQSHga ko'chib o'tayotgan o'zbek tilida so'zlashuvchilar uchun 150 kunlik (kuniga 5 soat) oflayn Amerika ingliz tili o'quv platformasi.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
