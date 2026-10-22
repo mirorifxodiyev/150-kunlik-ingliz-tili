@@ -33,7 +33,10 @@ import {
   UserCheck,
   UserPlus,
   Volume2,
+  Mic,
+  Wrench,
 } from "lucide-react";
+import { MicrophoneDiagnosticModal } from "./MicrophoneDiagnosticModal";
 
 interface SettingsViewProps {
   state: AppState;
@@ -56,6 +59,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [copiedSql, setCopiedSql] = useState<boolean>(false);
   const [showSqlBox, setShowSqlBox] = useState<boolean>(false);
+  const [showMicModal, setShowMicModal] = useState<boolean>(false);
 
   // Supabase Auth state (maps directly to public.user_progress.user_id)
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -580,6 +584,28 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
       </div>
 
+      {/* Microphone Diagnostic & Setup */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h2 className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <Mic className="w-4 h-4 text-sky-600" />
+              Mikrofon va Ovoz Yozish Diagnostikasi
+            </h2>
+            <p className="text-xs text-slate-500 mt-1 max-w-xl leading-relaxed">
+              Darslardagi talaffuz mashqlari uchun mikrofoningiz to'g'ri ulanganligini, brauzer ruxsatini va ovoz to'lqinini jonli sinab ko'ring.
+            </p>
+          </div>
+          <button
+            onClick={() => setShowMicModal(true)}
+            className="px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white rounded-lg text-xs font-bold flex items-center gap-2 shrink-0 transition-colors shadow-sm"
+          >
+            <Wrench className="w-3.5 h-3.5" />
+            Mikrofonni sinash va sozlash
+          </button>
+        </div>
+      </div>
+
       {/* Owner / Inspector Unlock Mode */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 space-y-3">
         <div className="flex items-center justify-between">
@@ -628,6 +654,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           Progressni o'chirish
         </button>
       </div>
+
+      {showMicModal && (
+        <MicrophoneDiagnosticModal onClose={() => setShowMicModal(false)} />
+      )}
     </div>
   );
 };

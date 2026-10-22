@@ -6,6 +6,7 @@ import {
   SpeechRecognitionResult,
   WordAlignmentToken,
 } from "../utils/speechRecognition";
+import { MicrophoneDiagnosticModal } from "./MicrophoneDiagnosticModal";
 import {
   ArrowLeft,
   BookOpen,
@@ -24,6 +25,8 @@ import {
   AlertCircle,
   ChevronRight,
   ChevronLeft,
+  Radio,
+  Wrench,
 } from "lucide-react";
 
 interface LessonDetailViewProps {
@@ -80,6 +83,9 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
   const [isListeningPrompt, setIsListeningPrompt] = useState<boolean>(false);
   const [spokenPromptText, setSpokenPromptText] = useState<string>("");
   const [micErrorMessage, setMicErrorMessage] = useState<string | null>(null);
+  const [showMicDiagnostics, setShowMicDiagnostics] = useState<boolean>(false);
+  const [interimSpeechText, setInterimSpeechText] = useState<string>("");
+  const activeListeningStopperRef = useRef<(() => void) | null>(null);
 
   // Quiz state
   const [userAnswers, setUserAnswers] = useState<Record<string, string>>({});
@@ -180,13 +186,15 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
   // Check vocabulary word pronunciation
   const handleCheckVocabPronunciation = (index: number, targetWord: string) => {
     setMicErrorMessage(null);
+    setInterimSpeechText("");
     setActiveVocabMicIdx(index);
 
-    SpeechRecognitionService.listenAndCheck(
+    const runner = SpeechRecognitionService.listenAndCheck(
       targetWord,
       (res) => {
         setVocabPronunciationMap((prev) => ({ ...prev, [index]: res }));
         setActiveVocabMicIdx(null);
+        setInterimSpeechText("");
         if (res.accuracyPct >= 75 && onPronounceWordSuccess) {
           onPronounceWordSuccess();
         }
@@ -194,26 +202,34 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
       (err) => {
         setMicErrorMessage(err);
         setActiveVocabMicIdx(null);
+        setInterimSpeechText("");
       },
       () => {},
       () => {
         setActiveVocabMicIdx(null);
+        setInterimSpeechText("");
+      },
+      (interim) => {
+        setInterimSpeechText(interim);
       }
     );
+    activeListeningStopperRef.current = runner.stop;
   };
 
   // Check target sentence pronunciation (word-by-word alignment)
   const handleCheckSentencePronunciation = (sentenceIdx: number, sentenceText: string) => {
     setMicErrorMessage(null);
+    setInterimSpeechText("");
     setSelectedRetryWord(null);
     setRetryWordFeedback(null);
     setIsListeningSentence(true);
 
-    SpeechRecognitionService.listenAndCheck(
+    const runner = SpeechRecognitionService.listenAndCheck(
       sentenceText,
       (res) => {
         setSentenceResults((prev) => ({ ...prev, [sentenceIdx]: res }));
         setIsListeningSentence(false);
+        setInterimSpeechText("");
         if (res.accuracyPct >= 70 && onPronounceWordSuccess) {
           onPronounceWordSuccess();
         }
@@ -221,12 +237,18 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
       (err) => {
         setMicErrorMessage(err);
         setIsListeningSentence(false);
+        setInterimSpeechText("");
       },
       () => {},
       () => {
         setIsListeningSentence(false);
+        setInterimSpeechText("");
+      },
+      (interim) => {
+        setInterimSpeechText(interim);
       }
     );
+    activeListeningStopperRef.current = runner.stop;
   };
 
   // Click on a red/yellow word to hear it and retry just that word
@@ -243,15 +265,17 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
   const handleRetrySingleWordMic = () => {
     if (!selectedRetryWord) return;
     setMicErrorMessage(null);
+    setInterimSpeechText("");
     setIsListeningRetryWord(true);
     setRetryWordFeedback(null);
 
     const { sentenceIdx, wordIdx, token } = selectedRetryWord;
 
-    SpeechRecognitionService.listenAndCheck(
+    const runner = SpeechRecognitionService.listenAndCheck(
       token.displayWord,
       (res) => {
         setIsListeningRetryWord(false);
+        setInterimSpeechText("");
         const wordRes = res.words[0];
         const sim = wordRes ? wordRes.similarity : res.accuracyPct;
         const newStatus = sim >= 85 ? "correct" : sim >= 55 ? "close" : "wrong";
@@ -298,23 +322,31 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
       (err) => {
         setMicErrorMessage(err);
         setIsListeningRetryWord(false);
+        setInterimSpeechText("");
       },
       () => {},
       () => {
         setIsListeningRetryWord(false);
+        setInterimSpeechText("");
+      },
+      (interim) => {
+        setInterimSpeechText(interim);
       }
     );
+    activeListeningStopperRef.current = runner.stop;
   };
 
   const handleListenSpeakingPrompt = () => {
     setMicErrorMessage(null);
+    setInterimSpeechText("");
     setIsListeningPrompt(true);
 
-    SpeechRecognitionService.listenAndCheck(
+    const runner = SpeechRecognitionService.listenAndCheck(
       "",
       (res) => {
         setSpokenPromptText(res.transcript);
         setIsListeningPrompt(false);
+        setInterimSpeechText("");
         if (res.transcript && onPronounceWordSuccess) {
           onPronounceWordSuccess();
         }
@@ -322,12 +354,18 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
       (err) => {
         setMicErrorMessage(err);
         setIsListeningPrompt(false);
+        setInterimSpeechText("");
       },
       () => {},
       () => {
         setIsListeningPrompt(false);
+        setInterimSpeechText("");
+      },
+      (interim) => {
+        setInterimSpeechText(interim);
       }
     );
+    activeListeningStopperRef.current = runner.stop;
   };
 
   const handleQuizOptionSelect = (qId: string, val: string) => {
@@ -665,27 +703,48 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                 Har bir so'zni eshiting (oddiy yoki 0.7x sekin) va mikrofonni bosib talaffuzingizni tekshiring.
               </p>
             </div>
-            <button
-              onClick={() => onAddVocabularyToSrs(lesson)}
-              className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              So'zlarni SRS kartalariga qo'shish
-            </button>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setShowMicDiagnostics(true)}
+                className="px-3 py-1.5 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 dark:hover:bg-sky-900 border border-sky-200 dark:border-sky-800 text-sky-700 dark:text-sky-300 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
+                title="Mikrofon diagnostikasi va ovoz balandligini tekshirish"
+              >
+                <Wrench className="w-3.5 h-3.5 text-sky-600" />
+                Mikrofonni tekshirish
+              </button>
+              <button
+                onClick={() => onAddVocabularyToSrs(lesson)}
+                className="px-3 py-1.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-200 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors shrink-0"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                So'zlarni SRS kartalariga qo'shish
+              </button>
+            </div>
           </div>
 
           {micErrorMessage && (
-            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-3.5 rounded-xl flex items-start gap-3 text-xs text-rose-700 dark:text-rose-300">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <span className="font-bold">Mikrofon xabari:</span> {micErrorMessage}
+            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-700 dark:text-rose-300">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-bold">Mikrofon xabari:</span> {micErrorMessage}
+                </div>
               </div>
-              <button
-                onClick={() => setMicErrorMessage(null)}
-                className="text-xs font-semibold hover:underline"
-              >
-                Yopish
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setShowMicDiagnostics(true)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                  Mikrofonni sozlash
+                </button>
+                <button
+                  onClick={() => setMicErrorMessage(null)}
+                  className="px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Yopish
+                </button>
+              </div>
             </div>
           )}
 
@@ -725,21 +784,43 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                           0.7x
                         </button>
                         <button
-                          onClick={() => handleCheckVocabPronunciation(i, v.en)}
+                          onClick={() => {
+                            if (isListening) {
+                              activeListeningStopperRef.current?.();
+                              setActiveVocabMicIdx(null);
+                            } else {
+                              handleCheckVocabPronunciation(i, v.en);
+                            }
+                          }}
                           className={`p-1.5 rounded-lg transition-all flex items-center gap-1 text-xs font-semibold ${
                             isListening
                               ? "bg-rose-600 text-white animate-pulse shadow-md"
                               : "bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200"
                           }`}
-                          title="Mikrofonga aytib tekshirish"
+                          title={isListening ? "To'xtatish uchun bosing" : "Mikrofonga aytib tekshirish"}
                         >
                           <Mic className="w-4 h-4" />
                           {isListening && (
-                            <span className="text-[11px] pr-1">Gapiring...</span>
+                            <span className="text-[11px] pr-1 font-bold">To'xtatish</span>
                           )}
                         </button>
                       </div>
                     </div>
+
+                    {isListening && (
+                      <div className="mb-2 p-2 rounded-lg bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 text-[11px] text-sky-800 dark:text-sky-200 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 font-medium">
+                          <Radio className="w-3.5 h-3.5 text-sky-600 animate-pulse shrink-0" />
+                          <span className="truncate">
+                            {interimSpeechText ? (
+                              <>Eshitilmoqda: <b className="text-slate-900 dark:text-white">"{interimSpeechText}"</b></>
+                            ) : (
+                              "So'zni mikrofonga ayting..."
+                            )}
+                          </span>
+                        </div>
+                      </div>
+                    )}
 
                     <div className="text-xs font-semibold text-sky-600 dark:text-sky-400 mb-2">
                       {v.uz}
@@ -969,33 +1050,57 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
       {/* ============================================================== */}
       {activeTab === 3 && (
         <div className="space-y-6">
-          {/* Honest Disclaimer Banner */}
-          <div className="bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 rounded-xl p-3.5 flex items-start gap-3 text-xs text-amber-900 dark:text-amber-200">
-            <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-            <div className="space-y-1">
-              <div className="font-semibold">
-                Bu tekshiruv taxminiy: brauzer tovushni matnga aylantiradi, Chrome'da internet kerak.
-              </div>
-              {!isSpeechSupported && (
-                <div className="text-rose-600 dark:text-rose-400 font-bold">
-                  Diqqat: Joriy brauzeringizda Web Speech Recognition qo'llab-quvvatlanmaydi. Mikrofon mashqi ishlashi uchun Google Chrome, Edge yoki Safari brauzeridan foydalaning.
+          {/* Honest Disclaimer Banner with Diagnostic Button */}
+          <div className="bg-amber-50/90 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/70 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200">
+            <div className="flex items-start gap-3">
+              <Info className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-semibold">
+                  Bu tekshiruv Web Speech tizimida ishlaydi (Chrome, Safari, Edge).
                 </div>
-              )}
+                {!isSpeechSupported ? (
+                  <div className="text-rose-600 dark:text-rose-400 font-bold">
+                    Diqqat: Joriy brauzeringizda Web Speech Recognition topilmadi. Mikrofon mashqi ishlashi uchun Google Chrome, Edge yoki Safari brauzeridan foydalaning.
+                  </div>
+                ) : (
+                  <div className="text-amber-700 dark:text-amber-300">
+                    Mikrofoningiz ovoz olayotganini va ruxsat berilganini tekshirish uchun sinovdan foydalanishingiz mumkin.
+                  </div>
+                )}
+              </div>
             </div>
+            <button
+              onClick={() => setShowMicDiagnostics(true)}
+              className="px-3.5 py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 transition-colors shrink-0 shadow-sm"
+            >
+              <Wrench className="w-3.5 h-3.5" />
+              Mikrofonni sinash va sozlash
+            </button>
           </div>
 
           {micErrorMessage && (
-            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-3.5 rounded-xl flex items-start gap-3 text-xs text-rose-700 dark:text-rose-300">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <div className="flex-1">
-                <span className="font-bold">Mikrofon xatosi:</span> {micErrorMessage}
+            <div className="bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 p-4 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-rose-700 dark:text-rose-300">
+              <div className="flex items-start gap-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div className="flex-1">
+                  <span className="font-bold">Mikrofon xatosi:</span> {micErrorMessage}
+                </div>
               </div>
-              <button
-                onClick={() => setMicErrorMessage(null)}
-                className="text-xs font-semibold hover:underline"
-              >
-                Yopish
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={() => setShowMicDiagnostics(true)}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold rounded-lg transition-colors flex items-center gap-1.5"
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                  Mikrofonni sozlash
+                </button>
+                <button
+                  onClick={() => setMicErrorMessage(null)}
+                  className="px-2.5 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-700 dark:text-slate-300 font-semibold hover:bg-slate-50 transition-colors"
+                >
+                  Yopish
+                </button>
+              </div>
             </div>
           )}
 
@@ -1118,9 +1223,14 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
               {/* Controls: Mic, Namuna TTS, Slow 0.7x, Mening ovozim, Ketma-ket */}
               <div className="flex flex-wrap items-center gap-2.5 pt-2">
                 <button
-                  onClick={() =>
-                    handleCheckSentencePronunciation(currentSentenceIdx, currentSentence)
-                  }
+                  onClick={() => {
+                    if (isListeningSentence) {
+                      activeListeningStopperRef.current?.();
+                      setIsListeningSentence(false);
+                    } else {
+                      handleCheckSentencePronunciation(currentSentenceIdx, currentSentence);
+                    }
+                  }}
                   disabled={!isSpeechSupported}
                   className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
                     isListeningSentence
@@ -1129,7 +1239,7 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                   }`}
                 >
                   <Mic className="w-4 h-4" />
-                  {isListeningSentence ? "Eshitilmoqda... Gapiring!" : "Mikrofonga aytish"}
+                  {isListeningSentence ? "To'xtatish (Gapirib bo'ldim)" : "Mikrofonga aytish"}
                 </button>
 
                 <button
@@ -1175,6 +1285,33 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                   </>
                 )}
               </div>
+
+              {/* Real-time Listening Indicator & Interim Transcription */}
+              {isListeningSentence && (
+                <div className="p-3.5 rounded-xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-between gap-3 text-xs text-sky-800 dark:text-sky-200 animate-pulse">
+                  <div className="flex items-center gap-2.5">
+                    <Radio className="w-4 h-4 text-sky-600 animate-pulse shrink-0" />
+                    <div>
+                      {interimSpeechText ? (
+                        <span>
+                          Eshitilmoqda: <strong className="text-slate-900 dark:text-white font-mono">"{interimSpeechText}"</strong>
+                        </span>
+                      ) : (
+                        <span>Mikrofon eshitmoqda... Gapni ingliz tilida o'qing!</span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      activeListeningStopperRef.current?.();
+                      setIsListeningSentence(false);
+                    }}
+                    className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded text-[11px] font-bold shrink-0"
+                  >
+                    Tugatish
+                  </button>
+                </div>
+              )}
 
               {/* Word-by-word result feedback */}
               {currentSentenceRes && (
@@ -1222,7 +1359,14 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                         So'zni eshitish (0.75x)
                       </button>
                       <button
-                        onClick={handleRetrySingleWordMic}
+                        onClick={() => {
+                          if (isListeningRetryWord) {
+                            activeListeningStopperRef.current?.();
+                            setIsListeningRetryWord(false);
+                          } else {
+                            handleRetrySingleWordMic();
+                          }
+                        }}
                         className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 ${
                           isListeningRetryWord
                             ? "bg-rose-600 text-white animate-pulse"
@@ -1231,10 +1375,20 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                       >
                         <Mic className="w-3.5 h-3.5" />
                         {isListeningRetryWord
-                          ? "So'zni ayting..."
+                          ? "To'xtatish"
                           : "Shu so'zni qayta aytib ko'rish"}
                       </button>
                     </div>
+                    {isListeningRetryWord && (
+                      <div className="p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-rose-200 dark:border-rose-700 text-xs text-rose-900 dark:text-rose-200 flex items-center gap-2">
+                        <Radio className="w-3.5 h-3.5 text-rose-600 animate-pulse shrink-0" />
+                        <span>
+                          {interimSpeechText
+                            ? `Eshitilmoqda: "${interimSpeechText}"`
+                            : `"${selectedRetryWord.token.displayWord}" so'zini mikrofonga ayting...`}
+                        </span>
+                      </div>
+                    )}
                     {retryWordFeedback && (
                       <div className="text-xs font-medium text-slate-800 dark:text-slate-200 pt-1">
                         {retryWordFeedback}
@@ -1288,7 +1442,14 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
 
             <div className="flex flex-wrap items-center gap-3">
               <button
-                onClick={handleListenSpeakingPrompt}
+                onClick={() => {
+                  if (isListeningPrompt) {
+                    activeListeningStopperRef.current?.();
+                    setIsListeningPrompt(false);
+                  } else {
+                    handleListenSpeakingPrompt();
+                  }
+                }}
                 disabled={!isSpeechSupported}
                 className={`px-4 py-2 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
                   isListeningPrompt
@@ -1298,10 +1459,36 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
               >
                 <Mic className="w-4 h-4" />
                 {isListeningPrompt
-                  ? "Sizni eshitmoqda... Gapiring!"
+                  ? "To'xtatish (Gapirib bo'ldim)"
                   : "Erkin nutqni mikrofonda sinash"}
               </button>
             </div>
+
+            {isListeningPrompt && (
+              <div className="p-3.5 rounded-xl bg-sky-50 dark:bg-sky-950/60 border border-sky-200 dark:border-sky-800 flex items-center justify-between gap-3 text-xs text-sky-800 dark:text-sky-200 animate-pulse">
+                <div className="flex items-center gap-2.5">
+                  <Radio className="w-4 h-4 text-sky-600 animate-pulse shrink-0" />
+                  <div>
+                    {interimSpeechText ? (
+                      <span>
+                        Eshitilmoqda: <strong className="text-slate-900 dark:text-white font-mono">"{interimSpeechText}"</strong>
+                      </span>
+                    ) : (
+                      <span>Mikrofon tinglamoqda... Fikringizni inglizcha erkin ayting!</span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    activeListeningStopperRef.current?.();
+                    setIsListeningPrompt(false);
+                  }}
+                  className="px-2.5 py-1 bg-sky-600 hover:bg-sky-700 text-white rounded text-[11px] font-bold shrink-0"
+                >
+                  Tugatish
+                </button>
+              </div>
+            )}
 
             {spokenPromptText && (
               <div className="p-3 rounded-lg bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs space-y-1">
@@ -1502,6 +1689,13 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {/* Microphone Diagnostic & Setup Modal */}
+      {showMicDiagnostics && (
+        <MicrophoneDiagnosticModal
+          onClose={() => setShowMicDiagnostics(false)}
+        />
       )}
     </div>
   );

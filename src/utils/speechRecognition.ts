@@ -134,10 +134,12 @@ const DIGIT_TO_WORDS: Record<string, string> = {
 };
 
 export class SpeechRecognitionService {
-  private static recognition: any = null;
+  private static activeRecognition: any = null;
+  private static activeSessionId: number = 0;
   private static mediaRecorder: MediaRecorder | null = null;
   private static mediaStream: MediaStream | null = null;
   private static audioChunks: Blob[] = [];
+  private static timeoutTimer: any = null;
 
   public static isSupported(): boolean {
     if (typeof window === "undefined") return false;
@@ -146,26 +148,190 @@ export class SpeechRecognitionService {
     );
   }
 
-  private static getRecognitionInstance(): any {
-    if (this.recognition) return this.recognition;
-    if (typeof window === "undefined") return null;
+  public static getBrowserInfo(): {
+    name: "Chrome" | "Safari" | "Edge" | "Firefox" | "Opera" | "Other";
+    isIframe: boolean;
+    hasSpeechRecognition: boolean;
+    hasGetUserMedia: boolean;
+  } {
+    if (typeof window === "undefined") {
+      return {
+        name: "Other",
+        isIframe: false,
+        hasSpeechRecognition: false,
+        hasGetUserMedia: false,
+      };
+    }
 
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const ua = navigator.userAgent;
+    let name: "Chrome" | "Safari" | "Edge" | "Firefox" | "Opera" | "Other" = "Other";
+    if (ua.includes("Edg/")) {
+      name = "Edge";
+    } else if (ua.includes("OPR/") || ua.includes("Opera")) {
+      name = "Opera";
+    } else if (ua.includes("Chrome") && !ua.includes("Edg/")) {
+      name = "Chrome";
+    } else if (ua.includes("Safari") && !ua.includes("Chrome")) {
+      name = "Safari";
+    } else if (ua.includes("Firefox")) {
+      name = "Firefox";
+    }
 
-    if (!SpeechRecognition) return null;
+    const isIframe = window.self !== window.top;
+    const hasSpeechRecognition = Boolean(
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition
+    );
+    const hasGetUserMedia = Boolean(
+      navigator.mediaDevices && navigator.mediaDevices.getUserMedia
+    );
 
-    const instance = new SpeechRecognition();
-    instance.lang = "en-US";
-    instance.continuous = false;
-    instance.interimResults = false;
-    instance.maxAlternatives = 5;
-
-    this.recognition = instance;
-    return instance;
+    return {
+      name,
+      isIframe,
+      hasSpeechRecognition,
+      hasGetUserMedia,
+    };
   }
 
-  private static async startAudioRecording(): Promise<void> {
+  /**
+   * Explicitly request microphone permission from browser
+   */
+  public static async requestPermission(): Promise<{
+    granted: boolean;
+    error?: string;
+  }> {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      return {
+        granted: false,
+        error: "Brauzeringizda mikrofon qurilmasiga to'g'ridan-to'g'ri kirish qo'llab-quvvatlanmaydi.",
+      };
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((track) => track.stop());
+      return { granted: true };
+    } catch (err: any) {
+      const name = err?.name || "";
+      if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+        return {
+          granted: false,
+          error:
+            "Mikrofon ruxsati rad etildi. Brauzer sozlamalaridan mikrofonni yoqishingiz kerak.",
+        };
+      }
+      if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+        return {
+          granted: false,
+          error: "Qurilmangizda mikrofon topilmadi. Mikrofon ulanganligini tekshiring.",
+        };
+      }
+      return {
+        granted: false,
+        error: `Mikrofonga ulanishda xatolik: ${err?.message || "Noma'lum xatolik"}`,
+      };
+    }
+  }
+
+  /**
+   * Test physical microphone with a real-time volume level meter (0-100) using Web Audio API
+   */
+  public static async testMicrophoneAudioLevel(
+    onVolume: (levelPct: number) => void
+  ): Promise<{ stop: () => void; error?: string }> {
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      !navigator.mediaDevices.getUserMedia
+    ) {
+      return {
+        stop: () => {},
+        error: "Brauzeringizda mikrofon testi qo'llab-quvvatlanmaydi.",
+      };
+    }
+
+    let stream: MediaStream | null = null;
+    let audioContext: AudioContext | null = null;
+    let animationFrameId: number | null = null;
+    let isRunning = true;
+
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      audioContext = new AudioCtx();
+      const source = audioContext.createMediaStreamSource(stream);
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
+      source.connect(analyser);
+
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      const sample = () => {
+        if (!isRunning) return;
+        analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+        }
+        const avg = sum / dataArray.length;
+        // Normalize 0-128 to 0-100 percentage
+        const levelPct = Math.min(100, Math.round((avg / 64) * 100));
+        onVolume(levelPct);
+        animationFrameId = requestAnimationFrame(sample);
+      };
+
+      sample();
+
+      return {
+        stop: () => {
+          isRunning = false;
+          if (animationFrameId !== null) cancelAnimationFrame(animationFrameId);
+          if (audioContext && audioContext.state !== "closed") {
+            audioContext.close().catch(() => {});
+          }
+          if (stream) {
+            stream.getTracks().forEach((t) => t.stop());
+          }
+          onVolume(0);
+        },
+      };
+    } catch (err: any) {
+      return {
+        stop: () => {},
+        error:
+          err?.name === "NotAllowedError"
+            ? "Mikrofon ruxsati berilmadi."
+            : `Mikrofonni ishga tushirib bo'lmadi: ${err?.message || ""}`,
+      };
+    }
+  }
+
+  private static stopActiveRecognition(): void {
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer);
+      this.timeoutTimer = null;
+    }
+    if (this.activeRecognition) {
+      try {
+        this.activeRecognition.onstart = null;
+        this.activeRecognition.onerror = null;
+        this.activeRecognition.onend = null;
+        this.activeRecognition.onresult = null;
+        this.activeRecognition.abort();
+      } catch (e) {
+        // ignore
+      }
+      this.activeRecognition = null;
+    }
+    this.stopAudioRecordingSync();
+  }
+
+  private static startSafeAudioRecording(sessionId: number): void {
     this.audioChunks = [];
     if (
       typeof navigator === "undefined" ||
@@ -176,22 +342,32 @@ export class SpeechRecognitionService {
       return;
     }
 
-    try {
-      this.stopAudioRecordingSync();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      this.mediaStream = stream;
-      const recorder = new MediaRecorder(stream);
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          this.audioChunks.push(e.data);
+    // Run getUserMedia asynchronously and non-blockingly so it never crashes SpeechRecognition
+    navigator.mediaDevices
+      .getUserMedia({ audio: true })
+      .then((stream) => {
+        if (sessionId !== this.activeSessionId) {
+          stream.getTracks().forEach((t) => t.stop());
+          return;
         }
-      };
-      recorder.start();
-      this.mediaRecorder = recorder;
-    } catch (err) {
-      // If MediaRecorder fails or conflicts, SpeechRecognition still continues
-      console.warn("MediaRecorder start warning:", err);
-    }
+        this.mediaStream = stream;
+        try {
+          const recorder = new MediaRecorder(stream);
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              this.audioChunks.push(e.data);
+            }
+          };
+          recorder.start();
+          this.mediaRecorder = recorder;
+        } catch (e) {
+          // ignore MediaRecorder failures
+        }
+      })
+      .catch((e) => {
+        // If getUserMedia fails or is blocked, SpeechRecognition can still function normally
+        console.warn("getUserMedia capture notice:", e?.message);
+      });
   }
 
   private static stopAudioRecording(): Promise<string | null> {
@@ -208,8 +384,12 @@ export class SpeechRecognitionService {
       if (!recorder || recorder.state === "inactive") {
         cleanupStream();
         if (this.audioChunks.length > 0) {
-          const blob = new Blob(this.audioChunks, { type: "audio/webm" });
-          resolve(URL.createObjectURL(blob));
+          try {
+            const blob = new Blob(this.audioChunks, { type: "audio/webm" });
+            resolve(URL.createObjectURL(blob));
+          } catch {
+            resolve(null);
+          }
         } else {
           resolve(null);
         }
@@ -219,8 +399,12 @@ export class SpeechRecognitionService {
       recorder.onstop = () => {
         cleanupStream();
         if (this.audioChunks.length > 0) {
-          const blob = new Blob(this.audioChunks, { type: "audio/webm" });
-          resolve(URL.createObjectURL(blob));
+          try {
+            const blob = new Blob(this.audioChunks, { type: "audio/webm" });
+            resolve(URL.createObjectURL(blob));
+          } catch {
+            resolve(null);
+          }
         } else {
           resolve(null);
         }
@@ -250,49 +434,116 @@ export class SpeechRecognitionService {
     this.mediaRecorder = null;
   }
 
+  /**
+   * Main speech recognition listener with word-level accuracy checking
+   */
   public static listenAndCheck(
     targetText: string,
     onResult: (res: SpeechRecognitionResult) => void,
     onError: (errMsg: string) => void,
     onStart?: () => void,
-    onEnd?: () => void
+    onEnd?: () => void,
+    onInterim?: (interimText: string) => void
   ): { stop: () => void } {
-    const recog = this.getRecognitionInstance();
-    if (!recog) {
+    if (typeof window === "undefined") {
+      onError("Web Speech API mavjud emas.");
+      return { stop: () => {} };
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRecognition) {
+      const isIframe = window.self !== window.top;
       onError(
-        "Brauzeringizda ovozni aniqlash (Web Speech Recognition) qo'llab-quvvatlanmaydi. Iltimos, Google Chrome, Microsoft Edge yoki Safari brauzeridan foydalaning."
+        isIframe
+          ? "Brauzeringizda yoki ushbu oyna rejimida Web Speech Recognition qo'llab-quvvatlanmaydi. Iltimos, sahifani to'g'ridan-to'g'ri Chrome yoki Safari brauzerida to'liq oching."
+          : "Brauzeringizda ovozni aniqlash (Web Speech Recognition) qo'llab-quvvatlanmaydi. Google Chrome, Microsoft Edge yoki Safari brauzeridan foydalaning."
       );
       return { stop: () => {} };
     }
 
-    try {
-      recog.abort();
-    } catch (e) {
-      // Ignore
-    }
+    // Stop and clear any previous session cleanly
+    this.stopActiveRecognition();
 
+    const sessionId = ++this.activeSessionId;
     let resultHandled = false;
 
+    // Create a pristine new instance for this recognition attempt
+    let recog: any = null;
+    try {
+      recog = new SpeechRecognition();
+    } catch (e: any) {
+      onError("Ovoz tizimini ishga tushirib bo'lmadi: " + (e?.message || ""));
+      return { stop: () => {} };
+    }
+
+    recog.lang = "en-US";
+    recog.continuous = false;
+    recog.interimResults = true; // Enables live feedback while speaking
+    recog.maxAlternatives = 5;
+
+    this.activeRecognition = recog;
+
+    // Timeout safety: if 14 seconds pass without final result or error, stop cleanly
+    this.timeoutTimer = setTimeout(() => {
+      if (sessionId === this.activeSessionId && !resultHandled) {
+        try {
+          recog.stop();
+        } catch {}
+      }
+    }, 14000);
+
     recog.onstart = () => {
-      this.startAudioRecording();
+      if (sessionId !== this.activeSessionId) return;
+      this.startSafeAudioRecording(sessionId);
       if (onStart) onStart();
     };
 
     recog.onerror = async (event: any) => {
-      await this.stopAudioRecording();
-      let msg = "Ovozni aniqlashda xatolik yuz berdi.";
-      if (event.error === "no-speech") {
-        msg = "Ovoz eshitilmadi. Iltimos, mikrofonga yaqinroq va aniqroq gapiring.";
-      } else if (event.error === "not-allowed") {
-        msg = "Mikrofon ruxsati berilmadi. Brauzer manzil satridagi qulf belgisidan mikrofon ruxsatini yoqing.";
-      } else if (event.error === "network") {
-        msg = "Tarmoq xatosi: Chrome brauzerida ovozni matnga aylantirish uchun internet aloqasi zarur.";
+      if (sessionId !== this.activeSessionId) return;
+      if (this.timeoutTimer) {
+        clearTimeout(this.timeoutTimer);
+        this.timeoutTimer = null;
       }
+      await this.stopAudioRecording();
+
+      const errType = event?.error;
+      // If session was aborted intentionally (e.g. user stopped or switched), don't show error
+      if (errType === "aborted") {
+        if (onEnd) onEnd();
+        return;
+      }
+
+      let msg = "Ovozni aniqlashda xatolik yuz berdi.";
+      if (errType === "no-speech") {
+        msg =
+          "Ovoz eshitilmadi. Iltimos, mikrofonga yaqinroq, aniqroq va balandroq gapiring.";
+      } else if (errType === "not-allowed" || errType === "permission-denied") {
+        msg =
+          "Mikrofon ruxsati berilmadi. Brauzer manzil satridagi qulf (yoki kamera/mikrofon) belgisini bosing va mikrofon ruxsatini 'Ruxsat berish' (Allow) qilib qo'ying.";
+      } else if (errType === "audio-capture") {
+        msg =
+          "Mikrofon qurilmasi topilmadi yoki boshqa ilova tomonidan band qilingan. Mikrofon ulanishini tekshiring.";
+      } else if (errType === "network") {
+        msg =
+          "Tarmoq xatosi: Chrome brauzerida ovozni matnga aylantirish uchun internet zarur (Google Speech). Internet aloqasini tekshiring yoki VPN-ni o'chirib ko'ring.";
+      } else if (errType === "service-not-allowed") {
+        msg = "Brauzeringiz ovoz xizmatidan foydalanishni cheklab qo'ygan.";
+      } else if (errType === "language-not-supported") {
+        msg = "Ingliz tili (en-US) ovoz moduli brauzeringizda qo'llab-quvvatlanmadi.";
+      }
+
       onError(msg);
       if (onEnd) onEnd();
     };
 
     recog.onend = () => {
+      if (sessionId !== this.activeSessionId) return;
+      if (this.timeoutTimer) {
+        clearTimeout(this.timeoutTimer);
+        this.timeoutTimer = null;
+      }
       if (!resultHandled) {
         this.stopAudioRecordingSync();
       }
@@ -300,24 +551,53 @@ export class SpeechRecognitionService {
     };
 
     recog.onresult = async (event: any) => {
-      resultHandled = true;
+      if (sessionId !== this.activeSessionId) return;
       const results = event.results;
-      const audioUrl = await this.stopAudioRecording();
+      if (!results || results.length === 0) return;
 
-      if (!results || results.length === 0 || !results[0] || results[0].length === 0) {
-        onError("Ovozni aniqlab bo'lmadi. Qayta urinib ko'ring.");
-        return;
+      // Check for interim results to provide live instant UI feedback
+      let interimTranscript = "";
+      let finalResultIndex = -1;
+
+      for (let i = 0; i < results.length; i++) {
+        const item = results[i];
+        if (item.isFinal) {
+          finalResultIndex = i;
+        } else {
+          interimTranscript += item[0]?.transcript || "";
+        }
       }
 
+      if (interimTranscript && onInterim && finalResultIndex === -1) {
+        onInterim(interimTranscript);
+      }
+
+      // If we don't have a final result yet, continue listening
+      if (finalResultIndex === -1) return;
+
+      resultHandled = true;
+      if (this.timeoutTimer) {
+        clearTimeout(this.timeoutTimer);
+        this.timeoutTimer = null;
+      }
+
+      const finalItem = results[finalResultIndex];
+      const audioUrl = await this.stopAudioRecording();
+
       const alternatives: { transcript: string; confidence: number }[] = [];
-      for (let i = 0; i < results[0].length; i++) {
+      for (let i = 0; i < finalItem.length; i++) {
         alternatives.push({
-          transcript: (results[0][i].transcript || "").trim(),
+          transcript: (finalItem[i].transcript || "").trim(),
           confidence:
-            typeof results[0][i].confidence === "number"
-              ? results[0][i].confidence
+            typeof finalItem[i].confidence === "number"
+              ? finalItem[i].confidence
               : 0.85,
         });
+      }
+
+      if (alternatives.length === 0 || !alternatives[0].transcript) {
+        onError("Ovoz eshitildi, lekin matn aniqlanmadi. Qayta urinib ko'ring.");
+        return;
       }
 
       // If targetText is empty (free speaking prompt mode)
@@ -346,17 +626,23 @@ export class SpeechRecognitionService {
       recog.start();
     } catch (err: any) {
       console.warn("Speech recognition start failed:", err);
-      onError("Mikrofonni ishga tushirib bo'lmadi. Biroz kutib qayta bosing.");
+      onError(
+        "Mikrofonni ishga tushirib bo'lmadi (" +
+          (err?.name || "Xatolik") +
+          "). Brauzer sahifasini yangilang yoki mikrofon ruxsatini tekshiring."
+      );
     }
 
     return {
       stop: () => {
-        try {
-          recog.stop();
-        } catch (e) {
-          // Ignore
+        if (sessionId === this.activeSessionId) {
+          try {
+            recog.stop();
+          } catch (e) {
+            // Ignore
+          }
+          this.stopAudioRecordingSync();
         }
-        this.stopAudioRecordingSync();
       },
     };
   }
