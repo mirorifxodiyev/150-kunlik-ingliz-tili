@@ -25,6 +25,7 @@ import {
   AlertCircle,
   ChevronRight,
   ChevronLeft,
+  CircleDot,
   Radio,
   Wrench,
 } from "lucide-react";
@@ -78,6 +79,9 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
   const [isListeningRetryWord, setIsListeningRetryWord] = useState<boolean>(false);
   const [retryWordFeedback, setRetryWordFeedback] = useState<string | null>(null);
   const [isComparingAudio, setIsComparingAudio] = useState<boolean>(false);
+  const [isRecordingSentenceAudio, setIsRecordingSentenceAudio] = useState<boolean>(false);
+  const [sentenceRecordedAudioMap, setSentenceRecordedAudioMap] = useState<Record<number, string>>({});
+  const audioRecorderStopperRef = useRef<(() => void) | null>(null);
 
   // Free speaking prompt state
   const [isListeningPrompt, setIsListeningPrompt] = useState<boolean>(false);
@@ -249,6 +253,43 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
       }
     );
     activeListeningStopperRef.current = runner.stop;
+  };
+
+  // Standalone recording of user's voice for direct audio playback & comparison
+  const handleToggleRecordSentenceAudio = async (sentenceIdx: number) => {
+    if (isRecordingSentenceAudio) {
+      if (audioRecorderStopperRef.current) {
+        audioRecorderStopperRef.current();
+        audioRecorderStopperRef.current = null;
+      }
+      setIsRecordingSentenceAudio(false);
+      return;
+    }
+
+    if (isListeningSentence) {
+      activeListeningStopperRef.current?.();
+      setIsListeningSentence(false);
+    }
+
+    setIsRecordingSentenceAudio(true);
+    setMicErrorMessage(null);
+
+    const runner = await SpeechRecognitionService.recordAudioClip(
+      (audioUrl) => {
+        setIsRecordingSentenceAudio(false);
+        if (audioUrl) {
+          setSentenceRecordedAudioMap((prev) => ({
+            ...prev,
+            [sentenceIdx]: audioUrl,
+          }));
+        }
+      },
+      (err) => {
+        setMicErrorMessage(err);
+        setIsRecordingSentenceAudio(false);
+      }
+    );
+    audioRecorderStopperRef.current = runner.stop;
   };
 
   // Click on a red/yellow word to hear it and retry just that word
@@ -860,6 +901,11 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                             Siz aytdingiz: "{res.transcript || "—"}"
                           </span>
                         </div>
+                        {res.messageUz && (
+                          <div className="text-[11px] leading-tight opacity-90 pt-0.5">
+                            {res.messageUz}
+                          </div>
+                        )}
                         {res.audioUrl && (
                           <div className="flex items-center gap-2 pt-1">
                             <button
@@ -1257,10 +1303,35 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                   Sekin namuna (0.7x)
                 </button>
 
-                {currentSentenceRes?.audioUrl && (
+                {/* Standalone Voice Recording Button */}
+                <button
+                  onClick={() => handleToggleRecordSentenceAudio(currentSentenceIdx)}
+                  className={`px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 border transition-all ${
+                    isRecordingSentenceAudio
+                      ? "bg-rose-600 text-white border-rose-600 animate-pulse shadow-md"
+                      : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800"
+                  }`}
+                  title="O'z ovozingizni yozib olib eshitish"
+                >
+                  <CircleDot
+                    className={`w-3.5 h-3.5 ${
+                      isRecordingSentenceAudio ? "text-white animate-spin" : "text-rose-500"
+                    }`}
+                  />
+                  {isRecordingSentenceAudio
+                    ? "Yozishni to'xtatish"
+                    : "Ovozimni yozib eshitish"}
+                </button>
+
+                {(currentSentenceRes?.audioUrl || sentenceRecordedAudioMap[currentSentenceIdx]) && (
                   <>
                     <button
-                      onClick={() => playRecordedAudio(currentSentenceRes.audioUrl!)}
+                      onClick={() =>
+                        playRecordedAudio(
+                          currentSentenceRes?.audioUrl ||
+                            sentenceRecordedAudioMap[currentSentenceIdx]
+                        )
+                      }
                       className="px-3.5 py-2 rounded-lg border border-emerald-300 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/50 text-xs font-semibold text-emerald-800 dark:text-emerald-200 flex items-center gap-1.5"
                     >
                       <Play className="w-3.5 h-3.5" />
@@ -1270,7 +1341,8 @@ export const LessonDetailView: React.FC<LessonDetailViewProps> = ({
                     <button
                       onClick={() =>
                         handleSequentialCompare(
-                          currentSentenceRes.audioUrl,
+                          currentSentenceRes?.audioUrl ||
+                            sentenceRecordedAudioMap[currentSentenceIdx],
                           currentSentence
                         )
                       }
